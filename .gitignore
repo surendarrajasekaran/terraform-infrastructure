@@ -3,10 +3,12 @@
 *.tfplan
 *.tfvars
 *.tfvars.json
+!apps/onboard/aws/aws-test.tfvars
 backend.tf
-.venv/
-__pycache__/
+!apps/onboard/aws/backend.tf
+!apps/onboard/gcp/backend.tf
 artifacts/
+kubeconfig*.yaml
 .env*
 *.pem
 *.key

@@ -221,3 +221,8 @@ variable "github_oidc_subject_prefix" {
   default     = null
   description = "Exact repo segment from GitHub OIDC settings, including immutable owner/repository IDs when enabled."
 }
+
+variable "argocd_chart_version" {
+  type    = string
+  default = "10.11.6"
+}

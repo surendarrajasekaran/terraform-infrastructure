@@ -33,3 +33,26 @@ module "aws" {
   flow_logs_enabled          = var.flow_logs_enabled
   log_retention_days         = var.log_retention_days
 }
+
+
+data "aws_eks_cluster" "this" {
+  name = module.aws[0].cluster_name
+}
+
+provider "helm" {
+  kubernetes = {
+    host                   = data.aws_eks_cluster.this.endpoint
+    cluster_ca_certificate = base64decode(data.aws_eks_cluster.this.certificate_authority[0].data)
+    exec = {
+      api_version = "client.authentication.k8s.io/v1beta1"
+      command     = "aws"
+      args        = ["eks", "get-token", "--cluster-name", data.aws_eks_cluster.this.name, "--region", var.region]
+    }
+  }
+}
+
+module "argocd" {
+  source        = "../../../modules/aws/argocd"
+  chart_version = var.argocd_chart_version
+  values        = [file("${path.module}/argocd-values.yaml")]
+}
