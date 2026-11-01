@@ -1,4 +1,6 @@
 output "cluster_name" { value = module.kubernetes.cluster_name }
+output "cluster_endpoint" { value = module.kubernetes.cluster_endpoint }
+output "cluster_certificate_authority_data" { value = module.kubernetes.cluster_certificate_authority_data }
 output "repository_urls" { value = module.ecr.repository_urls }
 output "repository_arns" { value = module.ecr.repository_arns }
 output "database_url" {

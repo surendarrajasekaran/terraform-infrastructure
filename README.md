@@ -101,7 +101,7 @@ Review each plan before applying it. Use targeting only for initial cluster crea
 
 ## Argo installation and application handoff
 
-`apps/onboard/aws` sources `modules/aws/argocd`, which owns Helm release `argocd` in namespace `argocd`. The provider reads the EKS endpoint/CA and uses `aws eks get-token` for short-lived authentication. No separate Argo installer or manual Helm install is needed.
+`apps/onboard/aws` sources `modules/aws/argocd`, which owns Helm release `argocd` in namespace `argocd`. The provider receives the EKS endpoint/CA directly from module outputs and uses `aws eks get-token` for short-lived authentication. It does not perform a separate cluster lookup that can block teardown after the cluster is gone. No separate Argo installer or manual Helm install is needed.
 
 When adopting an existing Argo release into a different Terraform state, import it once before planning with that target's input file:
 
@@ -147,6 +147,14 @@ terraform -chdir=apps/onboard/gcp plan -out=reviewed.tfplan
 terraform -chdir=apps/onboard/gcp apply reviewed.tfplan
 rm apps/onboard/gcp/reviewed.tfplan
 ```
+
+## Remove an AWS target
+
+Disable its application release and GitOps health workflows before decommissioning. While Kubernetes is reachable, remove the application Services/workloads and wait for their cloud load balancers to disappear. Uninstall the Terraform-managed Argo release before removing the cluster; a full Terraform destroy orders that dependency through the cluster module outputs.
+
+Disable database deletion protection through a reviewed configuration apply and empty only this target's ECR repositories before destroying them. Save and review a destroy plan for the same backend and inputs used to provision the target. The database configuration creates a final snapshot; review retained snapshots and automated backups separately when completing cleanup.
+
+If a previous partial destroy already removed EKS, check the remaining Terraform state and cloud resources first. An orphaned Kubernetes load balancer may still need deletion through the cloud API. Back up state before any state repair; removing an address from state does not delete its real resource. State storage and shared identity providers have a separate lifecycle from the application stack.
 
 ## Validation and troubleshooting
 
