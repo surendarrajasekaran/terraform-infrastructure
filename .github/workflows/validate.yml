@@ -1,0 +1,36 @@
+name: Terraform checks
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: terraform-checks-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { persist-credentials: false }
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with: { terraform_version: "1.11.4" }
+      - run: terraform fmt -check -recursive
+      - uses: terraform-linters/setup-tflint@6ffdbaa3be476b3431f7275c26966ef32ff60337 # v6
+        with: { tflint_version: v0.65.0 }
+      - run: tflint --recursive --format compact
+      - run: python3 -m py_compile apps/onboard/aws/bootstrap_argocd.py apps/onboard/aws/private_eks.py
+  validate:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        root: [apps/onboard/aws, apps/onboard/gcp, apps/onboard/aws/state-bootstrap]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { persist-credentials: false }
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with: { terraform_version: "1.11.4", terraform_wrapper: false }
+      - run: terraform -chdir=${{ matrix.root }} init -backend=false -input=false -lockfile=readonly
+      - run: terraform -chdir=${{ matrix.root }} validate -no-color
