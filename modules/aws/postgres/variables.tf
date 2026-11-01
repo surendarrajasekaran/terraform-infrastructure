@@ -35,5 +35,3 @@ variable "database" {
     error_message = "Use a safe database name, integer storage >= 20 GiB, max >= initial, backups 7-35 days and bounded log retention."
   }
 }
-
-

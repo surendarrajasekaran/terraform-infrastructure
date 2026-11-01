@@ -129,4 +129,3 @@ variable "public_cluster_endpoint" {
   default     = false
   description = "Explicit opt-in to a CIDR-restricted public control plane; default requires private runner connectivity."
 }
-
