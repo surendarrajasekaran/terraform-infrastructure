@@ -21,6 +21,45 @@ apps/onboard/
 
 Change reusable behavior in `modules/`; pass target-specific settings from `apps/onboard/`. PRs validate formatting, lint and syntax. Provisioning runs explicitly from an authorized operator machine.
 
+## AWS database configuration
+
+The AWS composition module sources separate `network`, `kubernetes`, `postgres`, `db-parameter-group`, `ecr` and `ci-registry-access` modules. The onboarding root also sources `argocd`. Resource settings flow from the root inputs into these modules.
+
+Set database availability and storage in the AWS input file:
+
+```hcl
+database = {
+  multi_az           = true
+  storage_gb         = 20
+  max_storage_gb     = 100
+  backup_days        = 14
+  log_retention_days = 14
+}
+```
+
+Both the reference test inputs and example enable Multi-AZ. This setting is independent of EKS worker count and the environment's network HA settings. Production validation requires Multi-AZ; non-production inputs can explicitly set it to `false`. Multi-AZ adds a standby for failover and increases database cost; it does not provide automatic CPU/RAM scaling or a readable standby. Compute capacity remains controlled by `aws_database_instance_class`.
+
+Storage autoscaling is configured from 20 GiB up to 100 GiB. Validation requires the maximum to be at least 110% of the initial allocation, keeping autoscaling enabled. Storage can grow to the cap; it does not automatically shrink. See [AWS storage autoscaling](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_PIOPS.Autoscaling.html) and [Multi-AZ DB instances](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Concepts.MultiAZSingleStandby.html).
+
+`modules/aws/db-parameter-group` creates a custom `postgres16` parameter group, which `postgres` attaches explicitly. Default parameter groups are rejected. TLS enforcement (`rds.force_ssl=1`) is fixed by the AWS composition module. Additional engine parameters can be passed from the onboarding root:
+
+```hcl
+database_parameters = {
+  log_min_duration_statement = {
+    value        = "1000"
+    apply_method = "immediate"
+  }
+}
+```
+
+This example logs statements taking at least 1,000 milliseconds; it is optional and is not enabled in the reference inputs. Use `pending-reboot` for static parameters and review restart requirements before applying changes. A `moved` block maps the former inline parameter group to the new module address for existing Terraform states. Multi-AZ databases retain backups for at least 14 days; other database settings remain private, encrypted and deletion-protected by default.
+
+After deployment, inspect the non-secret configuration summary:
+
+```sh
+terraform -chdir=apps/onboard/aws output database_configuration
+```
+
 ## Prerequisites
 
 Install Git, Terraform **1.11.4** and your cloud CLI. AWS needs AWS CLI v2 available to the Helm provider. Install `kubectl` for the later GitOps bootstrap.

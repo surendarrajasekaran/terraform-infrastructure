@@ -23,6 +23,7 @@ module "aws" {
   node_pool                  = var.aws_node_pool
   database_instance_class    = var.aws_database_instance_class
   database                   = var.database
+  database_parameters        = var.database_parameters
   administrator_arns         = var.aws_administrator_arns
   enable_ssm_access          = var.aws_enable_ssm_access
   additional_ecr_services    = var.aws_additional_ecr_services

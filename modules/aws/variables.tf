@@ -74,6 +74,7 @@ variable "database_instance_class" {
 variable "database" {
   type = object({
     name               = optional(string, "ideas")
+    multi_az           = optional(bool, true)
     storage_gb         = optional(number, 20)
     max_storage_gb     = optional(number, 100)
     backup_days        = optional(number, 7)
@@ -83,12 +84,16 @@ variable "database" {
   validation {
     condition = (
       can(regex("^[a-z][a-z0-9_]{0,30}$", var.database.name)) &&
-      var.database.storage_gb >= 20 && var.database.max_storage_gb >= var.database.storage_gb &&
+      var.database.storage_gb >= 20 && var.database.max_storage_gb >= ceil(var.database.storage_gb * 1.1) &&
       var.database.backup_days >= 7 && var.database.backup_days <= 35 &&
       contains([7, 14, 30, 60, 90, 180, 365], var.database.log_retention_days) &&
       alltrue([for n in [var.database.storage_gb, var.database.max_storage_gb, var.database.backup_days] : n == floor(n)])
     )
-    error_message = "Use a safe database name, integer storage >= 20 GiB, max >= initial, backups 7-35 days and bounded log retention."
+    error_message = "Use a safe database name, integer storage >= 20 GiB, autoscaling max >= 110% of initial, backups 7-35 days and bounded log retention."
+  }
+  validation {
+    condition     = !var.ha || var.database.multi_az
+    error_message = "Production databases require Multi-AZ deployment."
   }
 }
 
@@ -138,4 +143,17 @@ variable "github_oidc_provider_arn" {
 variable "github_oidc_subject_prefix" {
   type    = string
   default = null
+}
+
+variable "database_parameters" {
+  type = map(object({
+    value        = string
+    apply_method = optional(string, "pending-reboot")
+  }))
+  default     = {}
+  description = "Additional PostgreSQL 16 parameters; TLS enforcement is managed by the module."
+  validation {
+    condition     = !contains(keys(var.database_parameters), "rds.force_ssl")
+    error_message = "rds.force_ssl is fixed to 1 by the module; omit it from overrides."
+  }
 }

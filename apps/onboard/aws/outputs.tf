@@ -24,6 +24,7 @@ output "application_password" {
 output "database_host" {
   value = module.aws[0].database_host
 }
+output "database_configuration" { value = module.aws[0].database_configuration }
 
 output "database_egress_cidrs" { value = module.aws[0].database_egress_cidrs }
 

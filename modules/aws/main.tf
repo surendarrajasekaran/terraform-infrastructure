@@ -28,16 +28,25 @@ module "kubernetes" {
   enable_ssm_access       = var.enable_ssm_access
   log_retention_days      = var.log_retention_days
 }
+module "db_parameter_group" {
+  source = "./db-parameter-group"
+  name   = var.name
+  family = "postgres16"
+  parameters = merge(var.database_parameters, {
+    "rds.force_ssl" = { value = "1", apply_method = "pending-reboot" }
+  })
+}
+
 module "postgres" {
   source                 = "./postgres"
   name                   = var.name
-  ha                     = var.ha
   vpc_id                 = module.network.vpc_id
   node_security_group_id = module.kubernetes.node_security_group_id
   subnet_group_name      = module.network.database_subnet_group_name
   instance_class         = var.database_instance_class
   database               = var.database
   deletion_protection    = var.deletion_protection
+  parameter_group_name   = module.db_parameter_group.name
 }
 
 module "ci_registry_access" {

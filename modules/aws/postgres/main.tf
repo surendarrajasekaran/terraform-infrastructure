@@ -19,25 +19,25 @@ resource "aws_db_instance" "ideas" {
   identifier                      = var.name
   engine                          = "postgres"
   engine_version                  = "16"
-  instance_class                  = coalesce(var.instance_class, var.ha ? "db.t3.small" : "db.t3.micro")
+  instance_class                  = coalesce(var.instance_class, var.database.multi_az ? "db.t3.small" : "db.t3.micro")
   allocated_storage               = var.database.storage_gb
   max_allocated_storage           = var.database.max_storage_gb
   storage_encrypted               = true
   db_name                         = var.database.name
   username                        = "ideas"
   password                        = random_password.database.result
-  multi_az                        = var.ha
+  multi_az                        = var.database.multi_az
   publicly_accessible             = false
   db_subnet_group_name            = var.subnet_group_name
   vpc_security_group_ids          = [aws_security_group.database.id]
-  backup_retention_period         = max(var.database.backup_days, var.ha ? 14 : 7)
+  backup_retention_period         = max(var.database.backup_days, var.database.multi_az ? 14 : 7)
   deletion_protection             = var.deletion_protection
   skip_final_snapshot             = false
   final_snapshot_identifier       = "${var.name}-final-${random_id.snapshot.hex}"
   auto_minor_version_upgrade      = true
   apply_immediately               = false
   storage_type                    = "gp3"
-  parameter_group_name            = aws_db_parameter_group.ideas.name
+  parameter_group_name            = var.parameter_group_name
   enabled_cloudwatch_logs_exports = ["postgresql", "upgrade"]
   copy_tags_to_snapshot           = true
   allow_major_version_upgrade     = false
@@ -46,16 +46,6 @@ resource "aws_db_instance" "ideas" {
   backup_window                   = "02:00-03:00"
 }
 
-resource "aws_db_parameter_group" "ideas" {
-  name_prefix = "${var.name}-"
-  family      = "postgres16"
-  parameter {
-    name         = "rds.force_ssl"
-    value        = "1"
-    apply_method = "pending-reboot"
-  }
-  lifecycle { create_before_destroy = true }
-}
 resource "aws_cloudwatch_log_group" "database" {
   for_each          = toset(["postgresql", "upgrade"])
   name              = "/aws/rds/instance/${var.name}/${each.key}"

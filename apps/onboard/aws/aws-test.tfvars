@@ -17,3 +17,11 @@ aws_additional_ecr_services = ["argocd"]
 
 github_oidc_subject_prefix = "repo:surendarrajasekaran@35868093/om-idea-board@1438722777"
 argocd_chart_version       = "10.11.6"
+
+database = {
+  multi_az           = true
+  storage_gb         = 20
+  max_storage_gb     = 100
+  backup_days        = 14
+  log_retention_days = 14
+}

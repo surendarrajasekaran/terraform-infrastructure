@@ -22,3 +22,7 @@ moved {
   from = aws_db_instance.ideas
   to   = module.postgres.aws_db_instance.ideas
 }
+moved {
+  from = module.postgres.aws_db_parameter_group.ideas
+  to   = module.db_parameter_group.aws_db_parameter_group.this
+}

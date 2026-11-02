@@ -18,6 +18,7 @@ output "application_password" {
 output "database_host" {
   value = module.postgres.database_host
 }
+output "database_configuration" { value = module.postgres.database_configuration }
 
 output "database_egress_cidrs" { value = module.network.database_egress_cidrs }
 

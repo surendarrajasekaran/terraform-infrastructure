@@ -5,7 +5,14 @@ variable "name" {
     error_message = "Use a 3-40 character lowercase resource prefix, starting with a letter."
   }
 }
-variable "ha" { type = bool }
+variable "parameter_group_name" {
+  type        = string
+  description = "Name of an existing custom PostgreSQL 16 parameter group."
+  validation {
+    condition     = trimspace(var.parameter_group_name) != "" && !startswith(var.parameter_group_name, "default.")
+    error_message = "Supply a custom parameter group; default parameter groups are not permitted."
+  }
+}
 variable "vpc_id" { type = string }
 variable "node_security_group_id" { type = string }
 variable "subnet_group_name" { type = string }
@@ -18,6 +25,7 @@ variable "instance_class" {
 variable "database" {
   type = object({
     name               = optional(string, "ideas")
+    multi_az           = optional(bool, true)
     storage_gb         = optional(number, 20)
     max_storage_gb     = optional(number, 100)
     backup_days        = optional(number, 7)
@@ -27,11 +35,11 @@ variable "database" {
   validation {
     condition = (
       can(regex("^[a-z][a-z0-9_]{0,30}$", var.database.name)) &&
-      var.database.storage_gb >= 20 && var.database.max_storage_gb >= var.database.storage_gb &&
+      var.database.storage_gb >= 20 && var.database.max_storage_gb >= ceil(var.database.storage_gb * 1.1) &&
       var.database.backup_days >= 7 && var.database.backup_days <= 35 &&
       contains([7, 14, 30, 60, 90, 180, 365], var.database.log_retention_days) &&
       alltrue([for n in [var.database.storage_gb, var.database.max_storage_gb, var.database.backup_days] : n == floor(n)])
     )
-    error_message = "Use a safe database name, integer storage >= 20 GiB, max >= initial, backups 7-35 days and bounded log retention."
+    error_message = "Use a safe database name, integer storage >= 20 GiB, autoscaling max >= 110% of initial, backups 7-35 days and bounded log retention."
   }
 }

@@ -12,6 +12,17 @@ output "application_password" {
 }
 output "database_host" { value = aws_db_instance.ideas.address }
 
+output "database_configuration" {
+  description = "Non-secret availability, storage and parameter-group settings."
+  value = {
+    multi_az                    = aws_db_instance.ideas.multi_az
+    allocated_storage_gb        = aws_db_instance.ideas.allocated_storage
+    max_allocated_storage_gb    = aws_db_instance.ideas.max_allocated_storage
+    storage_autoscaling_enabled = aws_db_instance.ideas.max_allocated_storage > 0
+    parameter_group_name        = aws_db_instance.ideas.parameter_group_name
+  }
+}
+
 output "database_ca_certificate" {
   sensitive = true
   value     = ""

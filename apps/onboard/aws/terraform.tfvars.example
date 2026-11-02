@@ -13,7 +13,13 @@ deletion_protection = true
 public_cluster_endpoint = false
 flow_logs_enabled       = true
 log_retention_days      = 14
-database                = { storage_gb = 20, max_storage_gb = 100, backup_days = 7 }
+database = {
+  multi_az           = true
+  storage_gb         = 20
+  max_storage_gb     = 100
+  backup_days        = 14
+  log_retention_days = 14
+}
 labels                  = { owner = "platform", cost_center = "case-study" }
 aws_node_pool           = { min_size = 1, desired_size = 1, max_size = 3, instance_types = ["t3.medium"] }
 
