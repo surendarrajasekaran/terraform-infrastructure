@@ -21,7 +21,7 @@ database = {
   log_retention_days = 14
 }
 labels                  = { owner = "platform", cost_center = "case-study" }
-aws_node_pool           = { min_size = 1, desired_size = 1, max_size = 3, instance_types = ["t3.medium"] }
+aws_node_pool           = { min_size = 2, desired_size = 2, max_size = 3, instance_types = ["t3.medium"] }
 
 # Private test administration and the reviewed Argo controller image mirror.
 aws_enable_ssm_access = true

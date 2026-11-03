@@ -6,7 +6,7 @@ aws_account_id              = "812752207041"
 admin_cidrs                 = ["206.206.99.46/32"]
 public_cluster_endpoint     = true
 aws_enable_ssm_access       = true
-aws_node_pool               = { min_size = 1, desired_size = 1, max_size = 3, instance_types = ["t3.medium"], disk_size = 20 }
+aws_node_pool               = { min_size = 2, desired_size = 2, max_size = 3, instance_types = ["t3.medium"], disk_size = 20 }
 aws_database_instance_class = "db.t3.micro"
 kubernetes_version          = "1.35"
 github_repository           = "surendarrajasekaran/om-idea-board"

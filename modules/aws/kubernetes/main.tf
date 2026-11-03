@@ -27,6 +27,14 @@ module "eks" {
       description = "Node and pod traffic within this node group"
       protocol    = "tcp", from_port = 1025, to_port = 65535, type = "ingress", self = true
     }
+    ingress_metrics_api = {
+      description                   = "Control plane to Metrics Server API"
+      protocol                      = "tcp"
+      from_port                     = 10251
+      to_port                       = 10251
+      type                          = "ingress"
+      source_cluster_security_group = true
+    }
     egress_nodes = {
       description = "Node and pod traffic within this node group"
       protocol    = "tcp", from_port = 1025, to_port = 65535, type = "egress", self = true
@@ -49,8 +57,9 @@ module "eks" {
     }
   }
   cluster_addons = {
-    coredns    = {}
-    kube-proxy = {}
+    coredns        = {}
+    kube-proxy     = {}
+    metrics-server = {}
     vpc-cni = {
       before_compute       = true
       configuration_values = jsonencode({ enableNetworkPolicy = "true" })

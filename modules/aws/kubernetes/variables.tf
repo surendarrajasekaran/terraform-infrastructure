@@ -32,8 +32,8 @@ variable "administrator_arns" { type = set(string) }
 variable "node_pool" {
   type = object({
     instance_types = optional(list(string), ["t3.medium"])
-    min_size       = optional(number, 1)
-    desired_size   = optional(number, 1)
+    min_size       = optional(number, 2)
+    desired_size   = optional(number, 2)
     max_size       = optional(number, 3)
     disk_size      = optional(number, 20)
     capacity_type  = optional(string, "ON_DEMAND")

@@ -209,3 +209,20 @@ terraform -chdir=apps/onboard/gcp validate
 ```
 
 Renew expired cloud logins before operating. If Argo installation times out, verify EKS API reachability and image access. Backend-disabled validation is for configuration checks; initialize the real backend again before provisioning.
+
+## Kubernetes availability and resource metrics
+
+AWS node-pool defaults and the supplied test inputs use a minimum and desired count of two workers, with a maximum of three. The EKS module installs `metrics-server` as an AWS community add-on after compute is available. AWS selects a compatible add-on version using the same EKS module mechanism as the existing add-ons. Its serving port 10251 is reachable from the control-plane security group; node traffic already permits kubelet metric collection on 10250. This adds no publicly exposed metrics port and does not disable kubelet TLS verification in our Terraform configuration. See [EKS Metrics Server](https://docs.aws.amazon.com/eks/latest/userguide/metrics-server.html).
+
+The GitOps repository owns the two service HPAs, each initially 2–4 replicas at 70% CPU utilization, pod anti-affinity, topology spreading and PDBs. Terraform owns the cluster, workers and Metrics Server. The worker-group maximum does not enable automatic node growth: no Cluster Autoscaler or Karpenter is installed. HPA scales pods within current cluster capacity. Two nodes increase the baseline cost; node/zone placement and capacity must be verified after apply. A two-node group spanning two subnet AZs does not guarantee one node per AZ. GKE Autopilot manages node provisioning and resource metrics independently; this AWS add-on is not installed there.
+
+After apply, verify resource metrics before expecting the GitOps HPAs to work:
+
+```sh
+kubectl -n kube-system rollout status deployment/metrics-server
+kubectl get apiservice v1beta1.metrics.k8s.io
+kubectl top nodes
+kubectl get nodes -L topology.kubernetes.io/zone
+```
+
+Continue with the [GitOps availability checks](https://github.com/surendarrajasekaran/infra-helm-charts#availability-and-autoscaling). The current test stack was deleted; changing these files alone does not recreate it or prove live scaling.
