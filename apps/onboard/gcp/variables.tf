@@ -30,8 +30,11 @@ variable "region" {
 }
 
 variable "gcp_project" {
-  type    = string
-  default = ""
+  type = string
+  validation {
+    condition     = can(regex("^[a-z][a-z0-9-]{4,28}[a-z0-9]$", var.gcp_project))
+    error_message = "Supply the existing GCP project ID (6-30 lowercase letters, digits and hyphens), not its display name or project number."
+  }
 }
 
 variable "admin_cidrs" {
@@ -40,6 +43,10 @@ variable "admin_cidrs" {
   validation {
     condition     = length(var.admin_cidrs) > 0 && alltrue([for cidr in var.admin_cidrs : can(cidrnetmask(cidr)) && try(tonumber(split("/", cidr)[1]) >= 24, false)])
     error_message = "Supply trusted IPv4 administrator/runner CIDRs of /24 or narrower."
+  }
+  validation {
+    condition     = !var.public_cluster_endpoint || alltrue([for cidr in var.admin_cidrs : !can(regex("^(0[.]|10[.]|127[.]|169[.]254[.]|172[.](1[6-9]|2[0-9]|3[01])[.]|192[.]168[.])", cidrhost(cidr, 0)))])
+    error_message = "Public API allowlists require public source CIDRs; private CIDRs require private endpoint routing."
   }
 }
 
@@ -86,22 +93,22 @@ variable "gcp_database_tier" {
 
 variable "database" {
   type = object({
-    name               = optional(string, "ideas")
-    storage_gb         = optional(number, 20)
-    max_storage_gb     = optional(number, 100)
-    backup_days        = optional(number, 7)
-    log_retention_days = optional(number, 14)
+    high_availability = optional(bool, true)
+    name              = optional(string, "ideas")
+    storage_gb        = optional(number, 20)
+    max_storage_gb    = optional(number, 100)
+    backup_days       = optional(number, 7)
   })
   default = {}
   validation {
     condition = (
+      (var.environment != "production" || var.database.high_availability) &&
       can(regex("^[a-z][a-z0-9_]{0,30}$", var.database.name)) &&
-      var.database.storage_gb >= 20 && var.database.max_storage_gb >= var.database.storage_gb &&
+      var.database.storage_gb >= 20 && var.database.max_storage_gb >= var.database.storage_gb + min(floor(5 + var.database.storage_gb / 25), 25) &&
       var.database.backup_days >= 7 && var.database.backup_days <= 35 &&
-      contains([7, 14, 30, 60, 90, 180, 365], var.database.log_retention_days) &&
       alltrue([for n in [var.database.storage_gb, var.database.max_storage_gb, var.database.backup_days] : n == floor(n)])
     )
-    error_message = "Use a safe database name, integer storage >= 20 GiB, max >= initial, backups 7-35 days and bounded log retention."
+    error_message = "Use a safe database name, integer storage >= 20 GiB, room for one SSD storage-autogrowth increment, backups 7-35 days and regional availability for production."
   }
 }
 
@@ -128,4 +135,36 @@ variable "public_cluster_endpoint" {
   type        = bool
   default     = false
   description = "Explicit opt-in to a CIDR-restricted public control plane; default requires private runner connectivity."
+}
+
+variable "gcp_additional_gar_services" {
+  type    = set(string)
+  default = []
+}
+variable "gar_cleanup_dry_run" {
+  type    = bool
+  default = true
+}
+variable "github" {
+  type = object({
+    repository     = string
+    repository_id  = string
+    owner_id       = string
+    subject_prefix = optional(string)
+    branch         = optional(string, "main")
+  })
+  default = null
+}
+variable "database_flags" {
+  type    = map(string)
+  default = {}
+  validation {
+    condition     = alltrue([for name, value in var.database_flags : can(regex("^[a-z][a-z0-9_.]{0,62}$", name)) && try(length(value) > 0 && length(value) <= 256, false)])
+    error_message = "Supply valid Cloud SQL flag names and nonempty values up to 256 characters."
+  }
+}
+
+variable "argocd_chart_version" {
+  type    = string
+  default = "10.11.6"
 }

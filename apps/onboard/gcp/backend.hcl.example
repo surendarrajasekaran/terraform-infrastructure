@@ -1,0 +1,4 @@
+# Create this versioned, access-controlled bucket before terraform init.
+# The GCS backend provides native state locking; use a separate prefix per target.
+bucket = "YOUR_TERRAFORM_STATE_BUCKET"
+prefix = "idea-board/test/gcp"

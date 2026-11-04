@@ -7,7 +7,7 @@ output "database_url" {
   value       = module.gcp[0].database_url
 }
 output "cloud" { value = var.cloud }
-output "repository_urls" { value = {} }
+output "repository_urls" { value = module.gcp[0].repository_urls }
 output "region" { value = var.region }
 output "environment" { value = var.environment }
 output "gcp_project" { value = var.gcp_project }
@@ -32,4 +32,8 @@ output "database_ca_certificate" {
   value     = module.gcp[0].database_ca_certificate
 }
 
-output "ecr_push_role_arn" { value = null }
+output "registry_host" { value = module.gcp[0].registry_host }
+output "node_service_account_email" { value = module.gcp[0].node_service_account_email }
+output "workload_identity_provider" { value = module.gcp[0].workload_identity_provider }
+output "publisher_service_account_email" { value = module.gcp[0].publisher_service_account_email }
+output "database_configuration" { value = module.gcp[0].database_configuration }

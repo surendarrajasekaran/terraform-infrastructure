@@ -1,14 +1,41 @@
 cloud               = "gcp"
 name                = "idea-board"
-environment         = "staging"
+environment         = "test"
 region              = "asia-south1"
 gcp_project         = "replace-with-project-id"
 admin_cidrs         = ["203.0.113.10/32"]
 deletion_protection = true
 
-# Private API is the secure default. Replace admin_cidrs with the runner/VPN
-# source visible to that endpoint. Public access is an explicit reviewed opt-in.
+# Use a runner/VPN with a route to the private GKE API. A public API is an
+# explicit alternative and accepts only the public source CIDRs listed above.
 public_cluster_endpoint = false
 flow_logs_enabled       = true
-database                = { storage_gb = 20, max_storage_gb = 100, backup_days = 7 }
 labels                  = { owner = "platform", cost_center = "case-study" }
+
+# Regional standby and storage growth are independent from the environment name.
+database = {
+  high_availability = true
+  storage_gb        = 20
+  max_storage_gb    = 100
+  backup_days       = 14
+}
+# Cloud SQL uses instance flags, not an AWS-style DB parameter-group resource.
+database_flags = { log_min_duration_statement = "1000" }
+
+# Frontend/backend GAR repositories are always created. Additional repositories
+# are readable by GKE nodes but not writable by the application publisher.
+gcp_additional_gar_services = []
+gar_cleanup_dry_run         = true
+
+# Replace the owner, repository and immutable numeric IDs before enabling CI.
+# Set github = null when provisioning without GitHub publishing access.
+# Find the IDs with: gh api repos/OWNER/REPO --jq '{repository_id: .id, owner_id: .owner.id}'
+github = {
+  repository    = "owner/om-idea-board"
+  repository_id = "123456789"
+  owner_id      = "123456"
+  branch        = "main"
+  # Set this only if the GitHub repo uses customized immutable-ID OIDC subjects:
+  # subject_prefix = "repo:owner@123456/om-idea-board@123456789"
+}
+argocd_chart_version = "10.11.6"
