@@ -8,6 +8,7 @@ module "network" {
 }
 module "kubernetes" {
   source                  = "./kubernetes"
+  depends_on              = [module.network]
   name                    = var.name
   project                 = var.project
   region                  = var.region
@@ -26,8 +27,33 @@ module "postgres" {
   region              = var.region
   network_id          = module.network.ready
   ha                  = var.ha
+  database_flags      = var.database_flags
   tier                = var.database_tier
   database            = var.database
   deletion_protection = var.deletion_protection
   labels              = var.labels
+}
+
+module "gar" {
+  source                     = "./gar"
+  name                       = var.name
+  project                    = var.project
+  region                     = var.region
+  services                   = setunion(toset(["frontend", "backend"]), var.additional_gar_services)
+  node_service_account_email = module.kubernetes.node_service_account_email
+  cleanup_dry_run            = var.gar_cleanup_dry_run
+  labels                     = var.labels
+  depends_on                 = [module.network]
+}
+
+module "ci_registry_access" {
+  count              = var.github == null ? 0 : 1
+  source             = "./ci-registry-access"
+  name               = var.name
+  project            = var.project
+  region             = var.region
+  github             = var.github
+  depends_on         = [module.network]
+  github_environment = var.github_environment
+  repository_ids     = { for service, id in module.gar.repository_ids : service => id if contains(["frontend", "backend"], service) }
 }

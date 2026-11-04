@@ -16,6 +16,10 @@ variable "admin_cidrs" {
     condition     = length(var.admin_cidrs) > 0 && alltrue([for cidr in var.admin_cidrs : can(cidrnetmask(cidr)) && try(tonumber(split("/", cidr)[1]) >= 24, false)])
     error_message = "Supply trusted IPv4 administrator/runner CIDRs of /24 or narrower."
   }
+  validation {
+    condition     = !var.public_cluster_endpoint || alltrue([for cidr in var.admin_cidrs : !can(regex("^(0[.]|10[.]|127[.]|169[.]254[.]|172[.](1[6-9]|2[0-9]|3[01])[.]|192[.]168[.])", cidrhost(cidr, 0)))])
+    error_message = "Public API allowlists require public source CIDRs; private CIDRs require private endpoint routing."
+  }
 }
 variable "master_cidr" { type = string }
 variable "deletion_protection" { type = bool }

@@ -1,5 +1,5 @@
 resource "google_project_service" "api" {
-  for_each           = toset(["compute.googleapis.com", "container.googleapis.com", "sqladmin.googleapis.com", "servicenetworking.googleapis.com", "iam.googleapis.com", "logging.googleapis.com", "monitoring.googleapis.com"])
+  for_each           = toset(["compute.googleapis.com", "container.googleapis.com", "sqladmin.googleapis.com", "servicenetworking.googleapis.com", "iam.googleapis.com", "cloudresourcemanager.googleapis.com", "iamcredentials.googleapis.com", "sts.googleapis.com", "artifactregistry.googleapis.com", "logging.googleapis.com", "monitoring.googleapis.com"])
   project            = var.project
   service            = each.key
   disable_on_destroy = false
@@ -48,6 +48,10 @@ resource "google_compute_router_nat" "app" {
   region                             = var.region
   nat_ip_allocate_option             = "AUTO_ONLY"
   source_subnetwork_ip_ranges_to_nat = "ALL_SUBNETWORKS_ALL_IP_RANGES"
+  log_config {
+    enable = true
+    filter = "ERRORS_ONLY"
+  }
 }
 resource "google_compute_global_address" "sql" {
   project       = var.project

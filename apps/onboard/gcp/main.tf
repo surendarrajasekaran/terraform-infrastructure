@@ -20,6 +20,29 @@ module "gcp" {
   network_cidrs           = var.gcp_network_cidrs
   database_tier           = var.gcp_database_tier
   database                = var.database
+  database_flags          = var.database_flags
+  additional_gar_services = var.gcp_additional_gar_services
+  gar_cleanup_dry_run     = var.gar_cleanup_dry_run
+  github                  = var.github
+  github_environment      = "gcp-${var.environment}"
   labels                  = local.labels
   flow_logs_enabled       = var.flow_logs_enabled
+}
+
+provider "helm" {
+  kubernetes = {
+    host                   = module.gcp[0].cluster_endpoint
+    cluster_ca_certificate = try(base64decode(module.gcp[0].cluster_certificate_authority_data), null)
+    exec = {
+      api_version = "client.authentication.k8s.io/v1beta1"
+      command     = "gke-gcloud-auth-plugin"
+      args        = ["--use_application_default_credentials"]
+    }
+  }
+}
+module "argocd" {
+  source        = "../../../modules/gcp/argocd"
+  chart_version = var.argocd_chart_version
+  values        = [file("${path.module}/argocd-values.yaml")]
+  depends_on    = [module.gcp]
 }

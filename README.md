@@ -1,10 +1,10 @@
 # Terraform infrastructure
 
-Reusable AWS and GCP modules, sourced by application roots that supply environment settings. This repository provisions cloud resources. The AWS root also installs Argo CD through Terraform's Helm provider.
+Reusable AWS and GCP modules, sourced by application roots that supply environment settings. This repository provisions cloud resources. Both cloud roots install Argo CD through Terraform's Helm provider.
 
 | Repository | Responsibility |
 | --- | --- |
-| **terraform-infrastructure** — this private repository | Cloud resources, state configuration and the AWS Argo controller |
+| **terraform-infrastructure** — this private repository | Cloud resources, state configuration and the Argo controller for each cloud |
 | [infra-helm-charts](https://github.com/surendarrajasekaran/infra-helm-charts#readme) | Helm values, parent/child Applications, app bootstrap and health/recovery |
 | [om-idea-board](https://github.com/surendarrajasekaran/om-idea-board#readme) | App code, tests, image publishing and AI resource planning |
 
@@ -13,10 +13,10 @@ Reusable AWS and GCP modules, sourced by application roots that supply environme
 ```text
 modules/
   aws/              VPC, EKS, PostgreSQL, ECR, publisher access and Argo CD
-  gcp/              Network, GKE and PostgreSQL
+  gcp/              Network, GKE, PostgreSQL, GAR, publisher access and Argo CD
 apps/onboard/
   aws/              AWS module calls, inputs, backend and Argo values
-  gcp/              GCP module calls, inputs and backend
+  gcp/              GCP module calls, inputs, backend and Argo values
 ```
 
 Change reusable behavior in `modules/`; pass target-specific settings from `apps/onboard/`. PRs validate formatting, lint and syntax. Provisioning runs explicitly from an authorized operator machine.
@@ -62,7 +62,7 @@ terraform -chdir=apps/onboard/aws output database_configuration
 
 ## Prerequisites
 
-Install Git, Terraform **1.11.4** and your cloud CLI. AWS needs AWS CLI v2 available to the Helm provider. Install `kubectl` for the later GitOps bootstrap.
+Install Git, Terraform **1.11.4** and your cloud CLI. AWS needs AWS CLI v2 available to the Helm provider. GCP needs the Google Cloud CLI and `gke-gcloud-auth-plugin`. Install `kubectl` for the later GitOps bootstrap.
 
 You need permission to provision the target and access its state. Supply your own account/project, region, administrator access, network ranges and GitHub settings. Backend storage must exist before init: encrypted S3 with locking for AWS, or a versioned GCS bucket for GCP. Set an existing GitHub OIDC provider ARN when reusing one; otherwise the enabled publisher module can create it.
 
@@ -170,22 +170,101 @@ Continue with [GitOps first-time setup](https://github.com/surendarrajasekaran/i
 
 ## GCP infrastructure
 
-The GCP root provisions network, GKE and PostgreSQL. Live GCP application delivery remains outstanding; this root does not install Argo or provide a completed GCP release workflow.
+`apps/onboard/gcp` sources the GCP composition module and its separate `network`, `kubernetes`, `postgres`, `gar` and `ci-registry-access` modules. It also installs Argo CD using `modules/gcp/argocd`. Cloud provisioning remains an operator task; the existing application release workflow still targets AWS and must be extended before automated GCP application delivery. No live GCP deployment or public URL has been verified.
 
-Install the Google Cloud CLI, select an authorized project, create a separate versioned GCS state bucket and edit the inputs.
+| Component | GCP configuration |
+| --- | --- |
+| Networking | Custom VPC, private nodes, secondary pod/service ranges, Private Google Access, Cloud NAT and private service access for SQL |
+| Kubernetes | Regional GKE Autopilot, managed node provisioning and resource metrics, Dataplane V2 network policy, custom node identity and restricted API access |
+| Registry | Separate private frontend/backend Docker repositories in Google Artifact Registry; immutable tags and cleanup preview |
+| Image access | Repository-scoped reader for the GKE node identity; separate repository-scoped writer for GitHub |
+| GitHub authentication | Workload Identity Federation restricted to numeric owner/repository IDs, exact environment subject and branch; no service-account key |
+| Database | PostgreSQL 16 Enterprise, private IP, encrypted connections, regional standby by default, PITR, backups and capped SSD storage growth |
+| Argo CD | Terraform-managed Helm release with digest-pinned controller/Redis images and a private ClusterIP service |
+
+Cloud SQL has instance `database_flags`, rather than an AWS-style parameter-group resource. Set them through `database_flags` in the onboarding inputs. `database.high_availability` controls `REGIONAL` versus `ZONAL` independently of the environment; production requires regional availability. The regional default uses `db-custom-2-7680`; set `gcp_database_tier` for another supported size. Compute sizing is explicit, while disk autoscaling grows from 20 GB to a 100 GB cap. Validation reserves room for at least one SSD autogrowth increment. PITR keeps seven days of transaction logs; regional instances keep at least 14 daily backups, with retained backups enabled on deletion. Cloud SQL is encrypted at rest by Google and requires TLS in transit. The existing app connection format uses `verify-ca` with the per-instance CA mounted from a Secret. These settings do not implement automatic database compute scaling.
+
+VPC flow logs and Cloud NAT error logs provide network evidence. Cloud SQL logs use the project's Cloud Logging retention policy; the unused GCP `database.log_retention_days` input was removed because it never configured that policy. Review optional slow-query flags for application data exposure and cost. Existing GCP stacks retain their resource addresses; review regional-HA, new APIs, IAM, GAR and Argo changes before applying.
+
+### Configure the target
+
+Use an existing billing-enabled project, a versioned and access-controlled GCS state bucket, and an operator authorized to manage the required APIs, networking, GKE, SQL, GAR and IAM. The bucket must exist before initialization. Terraform enables Artifact Registry, IAM Credentials and STS APIs alongside the existing platform APIs; API services remain enabled on stack deletion.
 
 ```sh
+gcloud auth login
 gcloud auth application-default login
+gcloud config set project YOUR_PROJECT_ID
+# Install gke-gcloud-auth-plugin with your Google Cloud CLI/package manager.
+gke-gcloud-auth-plugin --version
+
 cp apps/onboard/gcp/terraform.tfvars.example apps/onboard/gcp/terraform.tfvars
-# Edit project, region, administrator CIDRs and network settings.
-terraform -chdir=apps/onboard/gcp init -reconfigure \
-  -backend-config="bucket=YOUR_STATE_BUCKET" \
-  -backend-config="prefix=YOUR_PROJECT/YOUR_ENVIRONMENT"
-terraform -chdir=apps/onboard/gcp plan -out=reviewed.tfplan
-# Review, then apply.
-terraform -chdir=apps/onboard/gcp apply reviewed.tfplan
-rm apps/onboard/gcp/reviewed.tfplan
+mkdir -p artifacts/gcp
+cp apps/onboard/gcp/backend.hcl.example artifacts/gcp/backend.hcl
+# Edit project, region, administrator CIDRs, database sizing and backend location.
+# Edit github.repository, repository_id and owner_id; set github = null to omit CI.
 ```
+
+Find the GitHub numeric IDs using your authorized personal account:
+
+```sh
+gh api repos/YOUR_OWNER/YOUR_APP_REPO --jq '{repository_id: .id, owner_id: .owner.id}'
+```
+
+The expected publishing environment is `gcp-<environment>`, for example `gcp-test`. The default subject is `repo:OWNER/REPO:environment:gcp-test`. If your repository uses customized immutable-ID OIDC subjects, set `github.subject_prefix` to the exact matching `repo:OWNER@OWNER_ID/REPO@REPOSITORY_ID`. The provider also checks the immutable numeric IDs and `refs/heads/<branch>`, so a pull request or another repository cannot use this publishing identity. GKE nodes get pull access to all this target's GAR repositories. The publisher can write only frontend/backend repositories and receives no GKE, SQL, infrastructure or other-repository permissions. See [Google's federation guidance](https://docs.cloud.google.com/iam/docs/workload-identity-federation-with-deployment-pipelines) and [GKE node service accounts](https://docs.cloud.google.com/kubernetes-engine/security/configure-node-service-accounts).
+
+### Provision infrastructure, then Argo CD
+
+Terraform's Helm provider uses the created GKE endpoint/CA directly and `gke-gcloud-auth-plugin --use_application_default_credentials` for short-lived access. The operator needs cluster-admin permissions for the Argo Helm installation and network access to the selected API endpoint. The default private endpoint needs a VPN/private runner route; enabling the public endpoint requires real public administrator CIDRs. The example documentation CIDR is not deployable access.
+
+From the repository root, use Terraform **1.11.4**, rather than an older system binary:
+
+```sh
+terraform -chdir=apps/onboard/gcp init -reconfigure \
+  -backend-config="$PWD/artifacts/gcp/backend.hcl"
+
+# Fresh cluster: provision platform resources before the Helm provider connects.
+terraform -chdir=apps/onboard/gcp plan -var-file=terraform.tfvars \
+  -target=module.gcp -out=infra.tfplan
+# Review the saved plan, including project, IAM and regional database cost.
+terraform -chdir=apps/onboard/gcp apply infra.tfplan
+
+# Establish approved connectivity to the new GKE API, then install Argo.
+terraform -chdir=apps/onboard/gcp plan -var-file=terraform.tfvars -out=full.tfplan
+terraform -chdir=apps/onboard/gcp apply full.tfplan
+rm apps/onboard/gcp/infra.tfplan apps/onboard/gcp/full.tfplan
+
+PROJECT_ID="$(terraform -chdir=apps/onboard/gcp output -raw gcp_project)"
+REGION="$(terraform -chdir=apps/onboard/gcp output -raw region)"
+CLUSTER_NAME="$(terraform -chdir=apps/onboard/gcp output -raw cluster_name)"
+gcloud container clusters get-credentials "$CLUSTER_NAME" \
+  --region "$REGION" --project "$PROJECT_ID" --internal-ip
+kubectl -n argocd get deployments
+kubectl top nodes
+terraform -chdir=apps/onboard/gcp output repository_urls
+terraform -chdir=apps/onboard/gcp output database_configuration
+```
+
+`--internal-ip` uses the private route. If you explicitly configured public API access, use `get-credentials` without that flag. The plugin used by Terraform reads Application Default Credentials, which can differ from the active `gcloud` account; authenticate both as intended. Use targeting only for the first platform phase. Existing-stack changes use a full reviewed plan. GKE Autopilot supplies node provisioning and the resource-metrics API, so a separate EKS Metrics Server add-on is unnecessary.
+
+### Registry and application handoff
+
+`repository_urls` returns image prefixes such as `REGION-docker.pkg.dev/PROJECT/idea-board-test-frontend/frontend` and the equivalent backend path. The images themselves are built and pushed by application CI; creating a repository does not populate it.
+
+| Terraform output | Consumer |
+| --- | --- |
+| `registry_host`, `repository_urls` | Docker login, build/push destinations and GitOps image values |
+| `workload_identity_provider` | GitHub Google authentication provider input |
+| `publisher_service_account_email` | GitHub Google authentication service-account input |
+| `node_service_account_email` | Verify GKE image-pull identity and repository reader bindings |
+| `database_url`, `migration_database_url`, `application_password` | Sensitive runtime/migration Secret values |
+| `database_ca_certificate` | Sensitive output containing the SQL CA to mount at `/etc/postgresql/ca/ca.crt` |
+| `database_egress_cidrs` | GCP-target backend network-policy destination ranges |
+
+For GitHub publishing, configure a `gcp-test` environment and give its authentication job `id-token: write` with read-only repository contents. Use the WIF provider and publisher outputs with Google's authentication action, then Docker login as `oauth2accesstoken` using the short-lived access token. Do not create or store a Google service-account JSON key. Add a GCP publishing path to the app workflow and a separate GCP target in `infra-helm-charts` before expecting an end-to-end deployment: GCP image prefixes, frontend LoadBalancer settings, namespace/project/controller values, database Secret/CA references, release target and health URL must belong to that target. Do not overwrite AWS values or reuse AWS recovery history. Terraform installs the controller; the GitOps parent Application must create the two service Applications.
+
+GAR cleanup is a dry run by default. Review candidates before setting `gar_cleanup_dry_run = false`: only old untagged artifacts are eligible, and the 20 most recent versions per package are retained. Immutable tagged images stay available for rollback; their retained storage still costs money. Additional GAR services, such as an operator-managed Argo mirror, get node pull access but are excluded from the application publisher's write permissions.
+
+For removal, retire the GCP Applications and LoadBalancer Services while the cluster is reachable. Remove the Terraform-managed Argo release before GKE, disable database protections through a reviewed apply, and review SQL backup retention and GAR contents before destroy. The remote-state bucket belongs to a separate lifecycle and is not destroyed by this root.
 
 ## Remove an AWS target
 
@@ -208,7 +287,7 @@ terraform -chdir=apps/onboard/gcp init -backend=false -input=false -lockfile=rea
 terraform -chdir=apps/onboard/gcp validate
 ```
 
-Renew expired cloud logins before operating. If Argo installation times out, verify EKS API reachability and image access. Backend-disabled validation is for configuration checks; initialize the real backend again before provisioning.
+Renew expired cloud logins before operating. If Argo installation times out, verify the selected cluster API reachability, cloud authentication and image access. Backend-disabled validation is for configuration checks; initialize the real backend again before provisioning.
 
 ## Kubernetes availability and resource metrics
 
